@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agregar Cliente - Pedidos</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- DaisyUI CSS - IMPORTANTE: Este CSS incluye todos los estilos de los componentes -->
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet" type="text/css" />
+  
+  <!-- Cliente API para comunicarse con el servidor -->
+  <script src="api-client.js"></script>
+  
+  <!-- Socket.IO Client para sincronización -->
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+  <script src="socket-client.js"></script>
+  
+  <style>
+    /* Estilos base */
+    body {
+      background-color: #f5f5f5;
+    }
+    
+    /* Si los botones no se ven, estos estilos básicos ayudan */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.5rem 1rem;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+    
+    .btn-primary {
+      background-color: #3b82f6;
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background-color: #2563eb;
+    }
+    
+    .btn-success {
+      background-color: #10b981;
+      color: white;
+    }
+    
+    .btn-success:hover {
+      background-color: #059669;
+    }
+    
+    .btn-neutral {
+      background-color: #6b7280;
+      color: white;
+    }
+    
+    .btn-ghost {
+      background-color: transparent;
+      color: #374151;
+    }
+    
+    .btn-ghost:hover {
+      background-color: rgba(0, 0, 0, 0.05);
+    }
+    
+    .btn-lg {
+      padding: 0.75rem 1.5rem;
+      font-size: 1.125rem;
+    }
+    
+    .btn-sm {
+      padding: 0.375rem 0.75rem;
+      font-size: 0.875rem;
+    }
+    
+    .input, .select {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #d1d5db;
+      border-radius: 0.5rem;
+      font-size: 1rem;
+    }
+    
+    .input:focus, .select:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+    
+    .input-bordered, .select-bordered {
+      border: 1px solid #d1d5db;
+    }
+    
+    .input-lg {
+      padding: 1rem;
+      font-size: 1.125rem;
+    }
+  </style>
+</head>
+
+<body class="min-h-screen bg-base-100 pb-24">
+
+  <!-- HEADER -->
+  <div class="sticky top-0 z-10 bg-base-100 shadow-sm">
+    <div class="container mx-auto px-4 py-3 flex items-center gap-3">
+      <button class="btn btn-ghost btn-circle" onclick="window.location.href='index.html'">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+      <h1 style="margin: revert;" class="text-xl font-bold flex-1 text-center">➕ Nuevo Cliente</h1>
+      <div class="w-10"></div>
+    </div>
+  </div>
+
+  <div class="container mx-auto px-4 max-w-md">
+
+    <!-- TARJETA DEL FORMULARIO -->
+    <div class="card bg-base-100 shadow-lg">
+      <div class="card-body p-6">
+
+        <!-- Campo: Nombre del Cliente -->
+        <div class="form-control w-full">
+          <label class="label">
+            <span class="label-text font-semibold text-lg">Nombre del cliente</span>
+          </label>
+          <input type="text" id="nombreCliente" placeholder="Ej: Juan Pérez"
+                 class="input input-bordered input-lg w-full" />
+        </div>
+
+        <!-- Botones -->
+        <div class="flex flex-col gap-3 mt-6">
+          <!-- Guardar -->
+          <button id="btnGuardar" class="btn btn-primary btn-lg w-full gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            Guardar Cliente
+          </button>
+
+          <!-- Volver -->
+          <button class="btn btn-ghost btn-lg w-full gap-2" onclick="window.location.href='index.html'">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            Cancelar
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Scripts -->
+  <script>
+    document.getElementById('btnGuardar').addEventListener('click', async () => {
+      const nombreCliente = document.getElementById('nombreCliente').value.trim();
+      
+      if (!nombreCliente) {
+        alert("Por favor ingresa el nombre del cliente");
+        return;
+      }
+
+      try {
+        // Inicializar BD
+        await initDB();
+        
+        // Verificar si el cliente ya existe
+        const clienteExistente = await buscarClientePorNombre(nombreCliente);
+        if (clienteExistente) {
+          if (!confirm(`El cliente "${nombreCliente}" ya existe. ¿Deseas continuar de todos modos?`)) {
+            return;
+          }
+        }
+        
+        // Agregar cliente
+        await agregarCliente(nombreCliente);
+        
+        alert(`Cliente "${nombreCliente}" guardado correctamente`);
+        window.location.href = 'index.html';
+      } catch (error) {
+        console.error('Error al guardar cliente:', error);
+        alert('Error al guardar el cliente. Por favor, intenta nuevamente.');
+      }
+    });
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pedidos del Cliente - Pedidos</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- DaisyUI CSS - IMPORTANTE: Este CSS incluye todos los estilos de los componentes -->
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet" type="text/css" />
+  
+  <!-- Cliente API para comunicarse con el servidor -->
+  <script src="api-client.js"></script>
+  
+  <!-- Socket.IO Client para sincronización -->
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+  <script src="socket-client.js"></script>
+  
+  <style>
+    /* Estilos base */
+    body {
+      background-color: #f5f5f5;
+    }
+    
+    /* Si los botones no se ven, estos estilos básicos ayudan */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.5rem 1rem;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+    
+    .btn-primary {
+      background-color: #3b82f6;
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background-color: #2563eb;
+    }
+    
+    .btn-success {
+      background-color: #10b981;
+      color: white;
+    }
+    
+    .btn-success:hover {
+      background-color: #059669;
+    }
+    
+    .btn-neutral {
+      background-color: #6b7280;
+      color: white;
+    }
+    
+    .btn-ghost {
+      background-color: transparent;
+      color: #374151;
+    }
+    
+    .btn-ghost:hover {
+      background-color: rgba(0, 0, 0, 0.05);
+    }
+    
+    .btn-lg {
+      padding: 0.75rem 1.5rem;
+      font-size: 1.125rem;
+    }
+    
+    .btn-sm {
+      padding: 0.375rem 0.75rem;
+      font-size: 0.875rem;
+    }
+    
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    
+    .badge-success {
+      background-color: #10b981;
+      color: white;
+    }
+    
+    .badge-warning {
+      background-color: #f59e0b;
+      color: white;
+    }
+    
+    button.badge {
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    
+    button.badge:hover {
+      transform: scale(1.05);
+    }
+    
+    button.badge:active {
+      transform: scale(0.95);
+    }
+  </style>
+</head>
+
+<body class="min-h-screen bg-base-100 pb-24">
+
+  <!-- HEADER -->
+  <div class="sticky top-0 z-10 bg-base-100 shadow-sm">
+    <div class="container mx-auto px-4 py-3 flex items-center gap-3">
+      <button class="btn btn-ghost btn-circle" onclick="window.location.href='index.html'">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+      <h1 class="text-xl font-bold flex-1 text-center" id="nombreCliente">Cliente</h1>
+      <div class="w-10"></div>
+    </div>
+  </div>
+
+  <div class="container mx-auto px-4 max-w-md">
+
+    <!-- ESTADÍSTICAS DEL CLIENTE -->
+    <div class="card bg-base-100 shadow-lg mb-4">
+      <div class="card-body p-4">
+        <div class="stats stats-vertical shadow-sm w-full">
+          <div class="stat py-3">
+            <div class="stat-title">Total Acumulado</div>
+            <div class="stat-value text-success text-2xl" id="totalAcumulado">$0</div>
+          </div>
+          <div class="stat py-3">
+            <div class="stat-title">Número de Pedidos</div>
+            <div class="stat-value text-2xl" id="numeroPedidos">0</div>
+          </div>
+          <div class="stat py-3">
+            <div class="stat-title">Estado General</div>
+            <div class="stat-value text-xl" id="estadoCliente">
+              <span id="estadoClienteBadge" class="badge badge-warning">Sin pedidos</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTÓN AGREGAR PEDIDO -->
+    <button id="btnAgregarPedido" class="btn btn-success btn-lg w-full mb-4 gap-2">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+      </svg>
+      Agregar Nuevo Pedido
+    </button>
+
+    <!-- LISTA DE PEDIDOS -->
+    <div id="listaPedidos" class="space-y-3 mb-4">
+      <!-- Los pedidos se cargarán aquí dinámicamente -->
+      <div class="text-center py-8 text-gray-500">
+        <span class="loading loading-spinner loading-lg"></span>
+        <p class="mt-4">Cargando pedidos...</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Script para cargar datos del cliente y sus pedidos -->
+  <script>
+    let clienteId = null;
+    let clienteNombre = '';
+    let sincronizando = false; // Bandera para saber si está sincronizando
+
+    // Función para mostrar indicador de carga
+    function mostrarCargando(mensaje = 'Cargando pedidos...') {
+      const listaPedidos = document.getElementById('listaPedidos');
+      listaPedidos.innerHTML = `
+        <div class="text-center py-8 text-gray-500">
+          <span class="loading loading-spinner loading-lg"></span>
+          <p class="mt-4">${mensaje}</p>
+        </div>
+      `;
+    }
+    
+    // Cargar pedidos del cliente
+    async function cargarPedidos(mostrarError = true, mostrarCarga = false) {
+      try {
+        // Mostrar indicador de carga solo si se solicita o si está sincronizando
+        if (mostrarCarga || sincronizando) {
+          mostrarCargando(sincronizando ? 'Sincronizando...' : 'Cargando pedidos...');
+        }
+        
+        // Obtener parámetros de la URL
+        const urlParams = new URLSearchParams(window.location.search);
+        clienteNombre = urlParams.get('cliente') || '';
+        const clienteIdParam = urlParams.get('id');
+        
+        // Convertir ID a número si existe
+        if (clienteIdParam) {
+          clienteId = parseInt(clienteIdParam, 10);
+        }
+        
+        // Si no viene el ID, buscar por nombre
+        if (!clienteId && clienteNombre) {
+          const cliente = await buscarClientePorNombre(clienteNombre);
+          if (cliente) {
+            clienteId = cliente.id;
+            clienteNombre = cliente.nombre;
+          }
+        }
+        
+        if (!clienteId) {
+          document.getElementById('nombreCliente').textContent = clienteNombre || 'Cliente no encontrado';
+          document.getElementById('listaPedidos').innerHTML = `
+            <div class="text-center py-8 text-gray-500">
+              <p>Cliente no encontrado.</p>
+            </div>
+          `;
+          return;
+        }
+        
+        // Obtener pedidos primero para calcular el estado correcto
+        console.log('Buscando pedidos para cliente ID:', clienteId, 'Tipo:', typeof clienteId);
+        const pedidos = await obtenerPedidosPorCliente(clienteId);
+        console.log('Pedidos encontrados:', pedidos);
+        
+        // Obtener datos del cliente (las estadísticas ya vienen calculadas del servidor)
+        const cliente = await obtenerClientePorId(clienteId);
+        if (cliente) {
+          clienteNombre = cliente.nombre;
+          document.getElementById('nombreCliente').textContent = clienteNombre;
+          document.getElementById('totalAcumulado').textContent = formatearMoneda(cliente.totalAcumulado || 0);
+          document.getElementById('numeroPedidos').textContent = cliente.numeroPedidos || 0;
+          
+          // Mostrar estado del cliente
+          const estadoCliente = cliente.estado || 'Sin pedidos';
+          const estadoBadge = document.getElementById('estadoClienteBadge');
+          if (estadoCliente === 'Entregado') {
+            estadoBadge.className = 'badge badge-success';
+            estadoBadge.textContent = '✅ Entregado';
+          } else if (estadoCliente === 'Pendiente') {
+            estadoBadge.className = 'badge badge-warning';
+            estadoBadge.textContent = '⏳ Pendiente';
+          } else {
+            estadoBadge.className = 'badge badge-neutral';
+            estadoBadge.textContent = 'Sin pedidos';
+          }
+        }
+        const listaPedidos = document.getElementById('listaPedidos');
+        
+        if (pedidos.length === 0) {
+          listaPedidos.innerHTML = `
+            <div class="text-center py-8 text-gray-500">
+              <p>No hay pedidos registrados para este cliente.</p>
+              <p class="text-sm mt-2">Agrega tu primer pedido para comenzar.</p>
+            </div>
+          `;
+          return;
+        }
+        
+        // Formatear fecha en español
+        function formatearFechaEspañol(fechaISO) {
+          try {
+            const fecha = new Date(fechaISO);
+            if (isNaN(fecha.getTime())) {
+              // Si la fecha no es válida, intentar con formato alternativo
+              return fechaISO || 'Fecha no disponible';
+            }
+            const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 
+                          'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+            return `${fecha.getDate()} de ${meses[fecha.getMonth()]}, ${fecha.getFullYear()}`;
+          } catch (e) {
+            return fechaISO || 'Fecha no disponible';
+          }
+        }
+        
+        console.log('Pedidos cargados:', pedidos);
+        
+        listaPedidos.innerHTML = pedidos.map(pedido => {
+          const fechaFormateada = formatearFechaEspañol(pedido.fechaCompleta || pedido.createdAt);
+          const estadoActual = pedido.estado === 'Entregado' || pedido.estado === 'Pagado' ? 'Entregado' : 'Pendiente';
+          const estadoClass = estadoActual === 'Entregado' ? 'badge-success' : 'badge-warning';
+          const estadoIcon = estadoActual === 'Entregado' 
+            ? `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+               </svg>`
+            : `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+               </svg>`;
+          
+          // Verificar que los items existan y sean un array
+          const itemsPedido = Array.isArray(pedido.items) ? pedido.items : [];
+          
+          return `
+            <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow">
+              <div class="card-body p-4">
+                <div class="flex justify-between items-start mb-3">
+                  <div>
+                    <p class="text-sm font-semibold">${fechaFormateada}</p>
+                    <p class="text-xs text-base-content opacity-60">${pedido.hora || 'Hora no disponible'}</p>
+                  </div>
+                  <button onclick="cambiarEstadoPedido(${pedido.id}, '${estadoActual}')" 
+                          class="badge ${estadoClass} gap-2 cursor-pointer hover:opacity-80 active:scale-95 transition-all border-0 select-none"
+                          title="Toca para cambiar entre Pendiente y Entregado">
+                    ${estadoIcon}
+                    <span class="font-semibold">${estadoActual}</span>
+                  </button>
+                </div>
+                
+                ${itemsPedido.length > 0 ? `
+                  <div class="space-y-2 mb-3">
+                    ${itemsPedido.map(item => `
+                      <div class="flex justify-between text-sm">
+                        <span>${item.nombre || 'Producto'}</span>
+                        <span class="font-semibold">${item.cantidad || 1}x ${formatearMoneda(item.precio || 0)}</span>
+                      </div>
+                    `).join('')}
+                  </div>
+                ` : `
+                  <div class="text-center py-2 mb-3 text-gray-500 text-sm">
+                    No hay items en este pedido
+                  </div>
+                `}
+                
+                <div class="divider my-2"></div>
+                <div class="flex justify-between items-center">
+                  <span class="text-sm font-semibold">Total del pedido:</span>
+                  <span class="text-xl font-bold text-success">${formatearMoneda(pedido.total || 0)}</span>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (error) {
+        console.error('Error al cargar pedidos:', error);
+        
+        // Solo mostrar error si no está sincronizando o si se solicita explícitamente
+        if (mostrarError && !sincronizando) {
+          document.getElementById('listaPedidos').innerHTML = `
+            <div class="text-center py-8 text-red-500">
+              <p>Error al cargar los pedidos.</p>
+              <p class="text-sm mt-2">Por favor, recarga la página.</p>
+            </div>
+          `;
+        } else if (sincronizando) {
+          // Si está sincronizando y hay error, mantener el loading
+          mostrarCargando('Sincronizando...');
+        }
+        throw error;
+      }
+    }
+    
+    // Configurar botón agregar pedido
+    document.getElementById('btnAgregarPedido').addEventListener('click', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const nombre = urlParams.get('cliente') || clienteNombre;
+      const id = urlParams.get('id') || clienteId;
+      
+      if (id) {
+        window.location.href = `agregar-pedido.html?cliente=${encodeURIComponent(nombre)}&id=${id}`;
+      } else {
+        window.location.href = `agregar-pedido.html?cliente=${encodeURIComponent(nombre)}`;
+      }
+    });
+    
+    // Función para cambiar el estado del pedido
+    async function cambiarEstadoPedido(pedidoId, estadoActual) {
+      try {
+        // Normalizar el estado actual (convertir "Pagado" a "Entregado" si es necesario)
+        const estadoNormalizado = (estadoActual === 'Entregado' || estadoActual === 'Pagado') ? 'Entregado' : 'Pendiente';
+        
+        // Alternar entre Pendiente y Entregado
+        const nuevoEstado = estadoNormalizado === 'Pendiente' ? 'Entregado' : 'Pendiente';
+        
+        console.log(`Cambiando estado del pedido ${pedidoId} de "${estadoNormalizado}" a "${nuevoEstado}"`);
+        
+        // Actualizar estado en la BD (esto también actualizará el estado del cliente)
+        await actualizarEstadoPedido(pedidoId, nuevoEstado);
+        
+        // Recargar los pedidos y datos del cliente para mostrar los cambios
+        await cargarPedidos();
+      } catch (error) {
+        console.error('Error al cambiar estado del pedido:', error);
+        alert('Error al cambiar el estado del pedido. Por favor, intenta nuevamente.');
+      }
+    }
+    
+    // Hacer la función disponible globalmente
+    window.cambiarEstadoPedido = cambiarEstadoPedido;
+    
+    // Escuchar eventos de sincronización en tiempo real
+    window.addEventListener('sync:data', async (event) => {
+      const data = event.detail;
+      console.log('📥 Evento de sincronización recibido en pedidos-cliente:', data);
+      
+      try {
+        // Verificar si el cambio es para el cliente actual
+        const urlParams = new URLSearchParams(window.location.search);
+        const clienteIdParam = urlParams.get('id');
+        
+        if (clienteIdParam) {
+          const clienteId = parseInt(clienteIdParam);
+          
+          // Verificar si el evento es relevante para este cliente
+          if ((data.type === 'pedido-creado' && data.clienteId === clienteId) ||
+              (data.type === 'pedido-actualizado' && data.clienteId === clienteId)) {
+            console.log('🔄 Recargando pedidos en tiempo real...');
+            
+            // Marcar que estamos sincronizando
+            sincronizando = true;
+            mostrarCargando('Sincronizando...');
+            
+            // Pequeño delay para asegurar que el servidor haya terminado de procesar
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Intentar recargar con reintentos en caso de error temporal
+            let intentos = 3;
+            let exito = false;
+            
+            while (intentos > 0 && !exito) {
+              try {
+                await cargarPedidos(false, false); // No mostrar errores ni loading adicional durante sincronización
+                exito = true;
+                sincronizando = false;
+              } catch (error) {
+                intentos--;
+                if (intentos > 0) {
+                  console.log(`⚠️ Error temporal al recargar, reintentando... (${intentos} intentos restantes)`);
+                  mostrarCargando('Sincronizando...');
+                  await new Promise(resolve => setTimeout(resolve, 800));
+                } else {
+                  console.error('Error al recargar después de varios intentos:', error);
+                  sincronizando = false;
+                  // Solo mostrar error si todos los intentos fallan
+                  await cargarPedidos(true, false);
+                }
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error al procesar sincronización:', error);
+        sincronizando = false;
+      }
+    });
+    
+    // Cargar pedidos cuando se carga la página
+    window.addEventListener('DOMContentLoaded', () => {
+      cargarPedidos(true, true); // Mostrar error y carga en la carga inicial
+    });
+  </script>
+
+</body>
+</html>

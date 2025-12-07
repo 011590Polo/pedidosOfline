@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pedidos</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- DaisyUI CSS - IMPORTANTE: Este CSS incluye todos los estilos de los componentes -->
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet" type="text/css" />
+  
+  <!-- Cliente API para comunicarse con el servidor -->
+  <script src="api-client.js"></script>
+  
+  <!-- Socket.IO Client para sincronización -->
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+  <script src="socket-client.js"></script>
+  
+  <style>
+    /* Estilos base */
+    body {
+      background-color: #f5f5f5;
+    }
+    
+    /* Si los botones no se ven, estos estilos básicos ayudan */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.5rem 1rem;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+    
+    .btn-primary {
+      background-color: #3b82f6;
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background-color: #2563eb;
+    }
+    
+    .btn-success {
+      background-color: #10b981;
+      color: white;
+    }
+    
+    .btn-success:hover {
+      background-color: #059669;
+    }
+    
+    .btn-neutral {
+      background-color: #6b7280;
+      color: white;
+    }
+    
+    .btn-secondary {
+      background-color: #8b5cf6;
+      color: white;
+    }
+    
+    .btn-accent {
+      background-color: #f59e0b;
+      color: white;
+    }
+    
+    .btn-info {
+      background-color: #06b6d4;
+      color: white;
+    }
+    
+    .btn-warning {
+      background-color: #f59e0b;
+      color: white;
+    }
+    
+    .btn-error {
+      background-color: #ef4444;
+      color: white;
+    }
+    
+    .input {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #d1d5db;
+      border-radius: 0.5rem;
+      font-size: 1rem;
+    }
+    
+    .input:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+    
+    .input-bordered {
+      border: 1px solid #d1d5db;
+    }
+    
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    
+    .badge-sm {
+      padding: 0.125rem 0.5rem;
+      font-size: 0.65rem;
+    }
+    
+    .badge-success {
+      background-color: #10b981;
+      color: white;
+    }
+    
+    .badge-warning {
+      background-color: #f59e0b;
+      color: white;
+    }
+    
+    .badge-neutral {
+      background-color: #6b7280;
+      color: white;
+    }
+  </style>
+</head>
+
+<body class="min-h-screen bg-base-100 pb-20">
+
+  <!-- HEADER -->
+  <div class="sticky top-0 z-10 bg-base-100 shadow-sm mb-4">
+    <div class="container mx-auto px-4 py-4">
+      <h1 style="margin: revert;" class="text-2xl font-bold text-center">📋 Control de Pedidos</h1>
+    </div>
+  </div>
+
+  <div class="container mx-auto px-4 max-w-md">
+
+    <!-- BOTÓN PRINCIPAL -->
+    <div class="flex flex-col gap-3 mb-6">
+      <!-- Agregar Pedido -->
+      <button class="btn btn-success btn-lg w-full gap-2" onclick="window.location.href='agregar-pedido.html'">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+        </svg>
+        Agregar Pedido
+      </button>
+    </div>
+
+    <!-- BÚSQUEDA DE CLIENTES -->
+    <div class="mb-6">
+      <div class="relative">
+        <input 
+          type="text" 
+          id="buscarCliente" 
+          placeholder="Buscar cliente por nombre..." 
+          class="input input-bordered w-full pl-12 pr-4"
+        />
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+      </div>
+    </div>
+
+    <!-- LISTA DE CLIENTES -->
+    <div id="listaClientes" class="space-y-3 mb-4">
+      <!-- Los clientes se cargarán aquí dinámicamente -->
+      <div class="text-center py-8 text-gray-500">
+        <span class="loading loading-spinner loading-lg"></span>
+        <p class="mt-4">Cargando clientes...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script>
+    let todosLosClientes = []; // Variable global para almacenar todos los clientes
+    let sincronizando = false; // Bandera para saber si está sincronizando
+    
+    // Función para mostrar indicador de carga
+    function mostrarCargando(mensaje = 'Cargando clientes...') {
+      const listaClientes = document.getElementById('listaClientes');
+      listaClientes.innerHTML = `
+        <div class="text-center py-8 text-gray-500">
+          <span class="loading loading-spinner loading-lg"></span>
+          <p class="mt-4">${mensaje}</p>
+        </div>
+      `;
+    }
+    
+    // Función para renderizar la lista de clientes
+    function renderizarClientes(clientes) {
+      const listaClientes = document.getElementById('listaClientes');
+      
+      if (clientes.length === 0) {
+        listaClientes.innerHTML = `
+          <div class="text-center py-8 text-gray-500">
+            <p>No se encontraron clientes.</p>
+            <p class="text-sm mt-2">Intenta con otro término de búsqueda.</p>
+          </div>
+        `;
+        return;
+      }
+      
+      listaClientes.innerHTML = clientes.map(cliente => `
+        <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow active:scale-[0.98]" 
+             onclick="window.location.href='pedidos-cliente.html?cliente=${encodeURIComponent(cliente.nombre)}&id=${cliente.id}'">
+          <div class="card-body p-4">
+            <div class="flex justify-between items-start">
+              <div class="flex-1">
+                <h2 class="card-title text-lg mb-2">${cliente.nombre}</h2>
+                <div class="stats stats-vertical shadow-sm">
+                  <div class="stat py-2 px-3">
+                    <div class="stat-title text-xs">Total</div>
+                    <div class="stat-value text-sm text-success">${formatearMoneda(cliente.totalAcumulado)}</div>
+                  </div>
+                  <div class="stat py-2 px-3">
+                    <div class="stat-title text-xs">Pedidos</div>
+                    <div class="stat-value text-sm">${cliente.numeroPedidos}</div>
+                  </div>
+                  <div class="stat py-2 px-3">
+                    <div class="stat-title text-xs">Estado</div>
+                    <div class="stat-value text-xs">
+                      ${cliente.estado === 'Entregado' 
+                        ? '<span class="badge badge-success badge-sm">✅ Entregado</span>' 
+                        : cliente.estado === 'Pendiente' 
+                        ? '<span class="badge badge-warning badge-sm">⏳ Pendiente</span>' 
+                        : '<span class="badge badge-neutral badge-sm">Sin pedidos</span>'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-base-content opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+    
+    // Función para filtrar clientes
+    function filtrarClientes(termino) {
+      if (!termino || termino.trim() === '') {
+        renderizarClientes(todosLosClientes);
+        return;
+      }
+      
+      const terminoLower = termino.toLowerCase().trim();
+      const clientesFiltrados = todosLosClientes.filter(cliente => 
+        cliente.nombre.toLowerCase().includes(terminoLower)
+      );
+      
+      renderizarClientes(clientesFiltrados);
+    }
+    
+    // Cargar clientes desde el servidor
+    async function cargarClientes(mostrarError = true, mostrarCarga = false) {
+      try {
+        // Mostrar indicador de carga solo si se solicita o si está sincronizando
+        if (mostrarCarga || sincronizando) {
+          mostrarCargando(sincronizando ? 'Sincronizando...' : 'Cargando clientes...');
+        }
+        
+        todosLosClientes = await obtenerClientes();
+        const listaClientes = document.getElementById('listaClientes');
+        
+        if (todosLosClientes.length === 0) {
+          listaClientes.innerHTML = `
+            <div class="text-center py-8 text-gray-500">
+              <p>No hay clientes registrados aún.</p>
+              <p class="text-sm mt-2">Agrega tu primer pedido para crear un cliente automáticamente.</p>
+            </div>
+          `;
+          return;
+        }
+        
+        renderizarClientes(todosLosClientes);
+      } catch (error) {
+        console.error('Error al cargar clientes:', error);
+        
+        // Solo mostrar error si no está sincronizando o si se solicita explícitamente
+        if (mostrarError && !sincronizando) {
+          document.getElementById('listaClientes').innerHTML = `
+            <div class="text-center py-8 text-red-500">
+              <p>Error al cargar los clientes.</p>
+              <p class="text-sm mt-2">Por favor, recarga la página.</p>
+            </div>
+          `;
+        } else if (sincronizando) {
+          // Si está sincronizando y hay error, mantener el loading
+          mostrarCargando('Sincronizando...');
+        }
+        throw error; // Re-lanzar para que los reintentos funcionen
+      }
+    }
+    
+    // Escuchar eventos de sincronización en tiempo real
+    window.addEventListener('sync:data', async (event) => {
+      const data = event.detail;
+      console.log('📥 Evento de sincronización recibido en index:', data);
+      
+      try {
+        // Si se actualizaron clientes o pedidos, recargar la lista desde el servidor
+        if (data.type === 'cliente-actualizado' || 
+            data.type === 'pedido-creado' || 
+            data.type === 'pedido-actualizado') {
+          console.log('🔄 Recargando clientes por sincronización...');
+          
+          // Marcar que estamos sincronizando
+          sincronizando = true;
+          mostrarCargando('Sincronizando...');
+          
+          // Pequeño delay para asegurar que el servidor haya terminado de procesar
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Intentar recargar con reintentos en caso de error temporal
+          let intentos = 3;
+          let exito = false;
+          
+          while (intentos > 0 && !exito) {
+            try {
+              await cargarClientes(false, false); // No mostrar errores ni loading adicional durante sincronización
+              exito = true;
+              sincronizando = false;
+            } catch (error) {
+              intentos--;
+              if (intentos > 0) {
+                console.log(`⚠️ Error temporal al recargar, reintentando... (${intentos} intentos restantes)`);
+                mostrarCargando('Sincronizando...');
+                await new Promise(resolve => setTimeout(resolve, 800));
+              } else {
+                console.error('Error al recargar después de varios intentos:', error);
+                sincronizando = false;
+                // Solo mostrar error si todos los intentos fallan
+                await cargarClientes(true, false);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error al procesar sincronización:', error);
+        sincronizando = false;
+      }
+    });
+    
+    // Cargar clientes cuando se carga la página
+    window.addEventListener('DOMContentLoaded', () => {
+      cargarClientes(true, true); // Mostrar error y carga en la carga inicial
+      
+      // Agregar evento de búsqueda
+      const buscarInput = document.getElementById('buscarCliente');
+      buscarInput.addEventListener('input', (e) => {
+        filtrarClientes(e.target.value);
+      });
+    });
+  </script>
+
+</body>
+</html>

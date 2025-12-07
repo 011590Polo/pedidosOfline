@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agregar Pedido - Pedidos</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- DaisyUI CSS - IMPORTANTE: Este CSS incluye todos los estilos de los componentes -->
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet" type="text/css" />
+  
+  <!-- Cliente API para comunicarse con el servidor -->
+  <script src="api-client.js"></script>
+  
+  <!-- Socket.IO Client para sincronización -->
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+  <script src="socket-client.js"></script>
+  
+  <style>
+    /* Estilos base */
+    body {
+      background-color: #f5f5f5;
+    }
+    
+    /* Si los botones no se ven, estos estilos básicos ayudan */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.5rem 1rem;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+    
+    .btn-primary {
+      background-color: #3b82f6;
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background-color: #2563eb;
+    }
+    
+    .btn-success {
+      background-color: #10b981;
+      color: white;
+    }
+    
+    .btn-success:hover {
+      background-color: #059669;
+    }
+    
+    .btn-neutral {
+      background-color: #6b7280;
+      color: white;
+    }
+    
+    .btn-ghost {
+      background-color: transparent;
+      color: #374151;
+    }
+    
+    .btn-ghost:hover {
+      background-color: rgba(0, 0, 0, 0.05);
+    }
+    
+    .btn-lg {
+      padding: 0.75rem 1.5rem;
+      font-size: 1.125rem;
+    }
+    
+    .btn-sm {
+      padding: 0.375rem 0.75rem;
+      font-size: 0.875rem;
+    }
+    
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .input, .select {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #d1d5db;
+      border-radius: 0.5rem;
+      font-size: 1rem;
+    }
+    
+    .input:focus, .select:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+    
+    .input-bordered, .select-bordered {
+      border: 1px solid #d1d5db;
+    }
+    
+    .input-lg {
+      padding: 1rem;
+      font-size: 1.125rem;
+    }
+  </style>
+</head>
+
+<body class="min-h-screen bg-base-100 pb-24">
+
+  <!-- HEADER -->
+  <div class="sticky top-0 z-10 bg-base-100 shadow-sm">
+    <div class="container mx-auto px-4 py-3 flex items-center gap-3">
+      <button id="btnVolver" class="btn btn-ghost btn-circle">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+      <h1 style="margin: revert;" class="text-xl font-bold flex-1 text-center">🧾 Nuevo Pedido</h1>
+      <div class="w-10"></div>
+    </div>
+  </div>
+
+  <div class="container mx-auto px-4 max-w-md">
+
+    <!-- TARJETA PRINCIPAL -->
+    <div class="card bg-base-100 shadow-lg mb-4">
+      <div class="card-body p-4">
+
+        <!-- NOMBRE DEL CLIENTE -->
+        <div class="form-control w-full mb-4">
+          <label class="label">
+            <span class="label-text font-semibold">Cliente</span>
+          </label>
+          <input type="text" id="nombreCliente" placeholder="Nombre del cliente"
+                 class="input input-bordered input-lg w-full" />
+          <label class="label" id="labelClienteBloqueado" style="display: none;">
+            <span class="label-text-alt text-gray-500">El nombre está bloqueado porque es un cliente existente</span>
+          </label>
+        </div>
+
+        <!-- FECHA Y HORA AUTOMÁTICA -->
+        <div class="form-control w-full mb-4">
+          <label class="label">
+            <span class="label-text font-semibold">Fecha y hora</span>
+          </label>
+          <input type="text" id="fechaHora" class="input input-bordered input-lg w-full bg-base-200" readonly />
+        </div>
+
+      </div>
+    </div>
+
+    <!-- FORMULARIO PARA AGREGAR ITEM -->
+    <div class="card bg-base-100 shadow-lg mb-4">
+      <div class="card-body p-4">
+        <h2 class="card-title mb-4 text-lg">Agregar Producto</h2>
+        
+        <!-- PRODUCTO -->
+        <div class="form-control w-full mb-3">
+          <label class="label">
+            <span class="label-text font-semibold">Producto</span>
+          </label>
+          <div class="flex gap-2 items-end">
+            <select id="producto" class="select select-bordered select-lg flex-1">
+              <option disabled selected>Cargando productos...</option>
+            </select>
+            <button id="btnAgregarProducto" class="btn btn-primary gap-1 px-2 py-2.5 whitespace-nowrap flex-shrink-0" style="width: 20%;height: -webkit-fill-available;">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+              </svg>
+              <span class="text-xs">Agregar</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- PRECIO Y CANTIDAD -->
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          <div class="form-control">
+            <label class="label">
+              <span class="label-text font-semibold">Precio</span>
+            </label>
+            <input id="precio" type="text" class="input input-bordered input-lg bg-base-200" readonly placeholder="$0" />
+          </div>
+          
+          <div class="form-control">
+            <label class="label">
+              <span class="label-text font-semibold">Cantidad</span>
+            </label>
+            <input id="cantidad" type="number" min="1" value="1"
+                   class="input input-bordered input-lg" />
+          </div>
+        </div>
+
+        <!-- BOTÓN AGREGAR ITEM -->
+        <button id="btnAgregarItem" class="btn btn-primary btn-lg w-full gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+          Agregar al pedido
+        </button>
+
+      </div>
+    </div>
+
+    <!-- LISTA DE ITEMS AGREGADOS -->
+    <div class="card bg-base-100 shadow-lg mb-4" id="cardItems" style="display: none;">
+      <div class="card-body p-4">
+        <h3 class="card-title text-lg mb-3">Items del pedido</h3>
+        <div id="listaItems" class="space-y-2">
+          <!-- Items se agregarán aquí -->
+        </div>
+      </div>
+    </div>
+
+    <!-- TOTAL DEL PEDIDO -->
+    <div class="card bg-success text-success-content shadow-lg mb-4 sticky bottom-20">
+      <div class="card-body p-4">
+        <div class="flex justify-between items-center">
+          <span class="text-lg font-bold">TOTAL</span>
+          <span id="totalPedido" class="text-3xl font-bold">$0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTONES (FLOATING) -->
+    <div class="fixed bottom-0 left-0 right-0 bg-base-100 shadow-2xl p-4 z-20">
+      <button id="btnGuardar" class="btn btn-success btn-lg w-full gap-2" disabled>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+        </svg>
+        Presione Aqui Para Guardar Pedido
+      </button>
+    </div>
+
+    <!-- MODAL AGREGAR PRODUCTO -->
+    <dialog id="modalAgregarProducto" class="modal">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Agregar Nuevo Producto</h3>
+        <div class="form-control w-full mb-4">
+          <label class="label">
+            <span class="label-text font-semibold">Nombre del Producto</span>
+          </label>
+          <input type="text" id="nombreProducto" placeholder="Ej: Perro caliente especial"
+                 class="input input-bordered input-lg w-full" />
+        </div>
+        <div class="form-control w-full mb-4">
+          <label class="label">
+            <span class="label-text font-semibold">Precio</span>
+          </label>
+          <input type="number" id="precioProducto" placeholder="Ej: 12000" min="0" step="1000"
+                 class="input input-bordered input-lg w-full" />
+        </div>
+        <div class="modal-action">
+          <button id="btnCancelarProducto" class="btn btn-ghost">Cancelar</button>
+          <button id="btnGuardarProducto" class="btn btn-primary">Guardar Producto</button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+      </form>
+    </dialog>
+
+  </div>
+
+  <!-- SCRIPTS -->
+  <script>
+    // ========== DECLARACIÓN DE VARIABLES Y REFERENCIAS AL DOM ==========
+    
+    // Referencias a elementos del DOM - deben estar primero
+    const producto = document.getElementById("producto");
+    const precio = document.getElementById("precio");
+    const cantidad = document.getElementById("cantidad");
+    const listaItems = document.getElementById("listaItems");
+    const cardItems = document.getElementById("cardItems");
+    const totalPedido = document.getElementById("totalPedido");
+    const btnAgregarItem = document.getElementById("btnAgregarItem");
+    const btnGuardar = document.getElementById("btnGuardar");
+    const modalAgregarProducto = document.getElementById("modalAgregarProducto");
+    const btnAgregarProducto = document.getElementById("btnAgregarProducto");
+    const btnGuardarProducto = document.getElementById("btnGuardarProducto");
+    const btnCancelarProducto = document.getElementById("btnCancelarProducto");
+    
+    // Productos hardcodeados para migración inicial
+    const productosIniciales = [
+      { nombre: "Perro caliente sencillo", precio: 8000 },
+      { nombre: "Perro caliente especial", precio: 12000 },
+      { nombre: "Hamburguesa sencilla", precio: 10000 },
+      { nombre: "Hamburguesa especial", precio: 15000 },
+      { nombre: "Doble carne", precio: 18000 },
+      { nombre: "Salchipapas pequeñas", precio: 9000 },
+      { nombre: "Salchipapas grandes", precio: 14000 },
+      { nombre: "Mazorcada", precio: 10000 },
+      { nombre: "Mazorcada especial", precio: 13000 },
+      { nombre: "Papas a la francesa", precio: 7000 },
+      { nombre: "Nuggets (6 und)", precio: 9000 },
+      { nombre: "Chuzo de pollo", precio: 11000 },
+      { nombre: "Chuzo de carne", precio: 13000 },
+      { nombre: "Arepa rellena mixta", precio: 12000 },
+      { nombre: "Arepa rellena de queso", precio: 7000 },
+      { nombre: "Empanada", precio: 2000 },
+      { nombre: "Deditos de queso (5 und)", precio: 6000 },
+      { nombre: "Gaseosa", precio: 3000 }
+    ];
+    
+    // Obtener nombre e ID del cliente de la URL si existe
+    const urlParams = new URLSearchParams(window.location.search);
+    const nombreClienteURL = urlParams.get('cliente');
+    const clienteIdURL = urlParams.get('id');
+    
+    // Variable para saber si es un cliente existente
+    let esClienteExistente = false;
+    
+    if (nombreClienteURL) {
+      const nombreClienteInput = document.getElementById('nombreCliente');
+      nombreClienteInput.value = decodeURIComponent(nombreClienteURL);
+      
+      // Si viene el ID, es un cliente existente - bloquear edición
+      if (clienteIdURL) {
+        nombreClienteInput.dataset.clienteId = clienteIdURL;
+        nombreClienteInput.readOnly = true;
+        nombreClienteInput.classList.add('bg-base-200');
+        nombreClienteInput.classList.add('cursor-not-allowed');
+        nombreClienteInput.setAttribute('readonly', 'readonly');
+        esClienteExistente = true;
+        
+        // Mostrar mensaje de que está bloqueado
+        const labelBloqueado = document.getElementById('labelClienteBloqueado');
+        if (labelBloqueado) {
+          labelBloqueado.style.display = 'block';
+        }
+        
+        // Agregar indicador visual en el label
+        const label = nombreClienteInput.previousElementSibling?.querySelector('.label-text');
+        if (label) {
+          label.innerHTML = '<span class="label-text font-semibold">Cliente</span> <span class="text-xs text-gray-500">🔒 (Bloqueado)</span>';
+        }
+        
+        // Prevenir cualquier intento de edición
+        nombreClienteInput.addEventListener('input', function(e) {
+          if (esClienteExistente && nombreClienteURL) {
+            e.preventDefault();
+            this.value = decodeURIComponent(nombreClienteURL);
+            return false;
+          }
+        });
+        
+        nombreClienteInput.addEventListener('keydown', function(e) {
+          if (esClienteExistente) {
+            e.preventDefault();
+            return false;
+          }
+        });
+        
+        nombreClienteInput.addEventListener('paste', function(e) {
+          if (esClienteExistente) {
+            e.preventDefault();
+            return false;
+          }
+        });
+      }
+    }
+    
+    // ========== DECLARACIÓN DE FUNCIONES ==========
+    
+    // Inicializar fecha y hora
+    function actualizarFechaHora() {
+      const ahora = new Date();
+      const fecha = ahora.toLocaleDateString('es-ES', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      const hora = ahora.toLocaleTimeString('es-ES', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+      document.getElementById('fechaHora').value = `${fecha}, ${hora}`;
+    }
+    
+    // Función para poblar el combo de productos
+    async function cargarProductos() {
+      try {
+        await initDB();
+        const productos = await obtenerProductos();
+        
+        // Si no hay productos, migrar los iniciales
+        if (productos.length === 0) {
+          console.log('Migrando productos iniciales...');
+          for (const prod of productosIniciales) {
+            await agregarProducto(prod);
+          }
+          // Recargar productos después de la migración
+          const productosMigrados = await obtenerProductos();
+          poblarComboProductos(productosMigrados);
+        } else {
+          poblarComboProductos(productos);
+        }
+      } catch (error) {
+        console.error('Error al cargar productos:', error);
+        producto.innerHTML = '<option disabled selected>Error al cargar productos</option>';
+      }
+    }
+    
+    // Función para poblar el combo con productos
+    function poblarComboProductos(productos) {
+      producto.innerHTML = '<option disabled selected>Seleccione un producto</option>';
+      
+      productos.forEach(prod => {
+        const option = document.createElement('option');
+        option.value = prod.precio;
+        option.setAttribute('data-nombre', prod.nombre);
+        option.textContent = `${prod.nombre} - ${formatearMoneda(prod.precio)}`;
+        producto.appendChild(option);
+      });
+    }
+
+    let items = [];
+
+    // Actualizar precio cuando se selecciona un producto
+    producto.addEventListener("change", () => {
+      if (producto.value) {
+        precio.value = "$" + Number(producto.value).toLocaleString();
+      } else {
+        precio.value = "";
+      }
+    });
+
+    // Agregar item al pedido
+    btnAgregarItem.addEventListener("click", () => {
+      const productoSelect = producto.value;
+      const cantidadValue = cantidad.value || 1;
+      
+      if (!productoSelect) {
+        alert("Por favor selecciona un producto");
+        return;
+      }
+
+      const productoNombre = producto.options[producto.selectedIndex].dataset.nombre;
+      const productoPrecio = Number(productoSelect);
+      const cantidadNum = Number(cantidadValue);
+      const subtotal = productoPrecio * cantidadNum;
+
+      items.push({
+        nombre: productoNombre,
+        precio: productoPrecio,
+        cantidad: cantidadNum,
+        subtotal: subtotal
+      });
+
+      // Limpiar formulario
+      producto.value = "";
+      precio.value = "";
+      cantidad.value = 1;
+
+      actualizarListaItems();
+      calcularTotal();
+      
+      // Hacer scroll hacia el nuevo item agregado
+      setTimeout(() => {
+        const ultimoItemIndex = items.length - 1;
+        const nuevoItem = document.getElementById(`item-${ultimoItemIndex}`);
+        if (nuevoItem) {
+          // Scroll suave hacia el nuevo item
+          nuevoItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Resaltado visual temporal
+          nuevoItem.style.transition = 'background-color 0.3s';
+          nuevoItem.style.backgroundColor = '#dbeafe';
+          setTimeout(() => {
+            nuevoItem.style.backgroundColor = '';
+          }, 1500);
+        }
+      }, 150);
+    });
+
+    // Actualizar lista de items
+    function actualizarListaItems() {
+      if (items.length === 0) {
+        cardItems.style.display = 'none';
+        return;
+      }
+
+      cardItems.style.display = 'block';
+      listaItems.innerHTML = items.map((item, index) => `
+        <div class="flex justify-between items-center bg-base-200 p-3 rounded-lg" data-item-index="${index}" id="item-${index}">
+          <div class="flex-1">
+            <p class="font-semibold text-sm">${item.nombre}</p>
+            <p class="text-xs text-base-content opacity-70">${item.cantidad}x $${item.precio.toLocaleString()}</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="font-bold text-success">$${item.subtotal.toLocaleString()}</span>
+            <button class="btn btn-sm btn-circle btn-ghost text-error" onclick="eliminarItem(${index})">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // Eliminar item
+    function eliminarItem(index) {
+      items.splice(index, 1);
+      actualizarListaItems();
+      calcularTotal();
+    }
+
+    // Calcular total del pedido
+    function calcularTotal() {
+      const total = items.reduce((sum, item) => sum + item.subtotal, 0);
+      totalPedido.textContent = "$" + total.toLocaleString();
+      btnGuardar.disabled = items.length === 0 || !document.getElementById('nombreCliente').value.trim();
+    }
+
+    document.getElementById('nombreCliente').addEventListener('input', calcularTotal);
+    
+    setTimeout(() => {
+      calcularTotal();
+    }, 100);
+
+    // Guardar pedido
+    btnGuardar.addEventListener("click", async () => {
+      const nombreClienteInput = document.getElementById('nombreCliente');
+      let nombreCliente = nombreClienteInput.value.trim();
+      
+      if (!nombreCliente) {
+        alert("Por favor ingresa el nombre del cliente");
+        return;
+      }
+
+      if (items.length === 0) {
+        alert("Por favor agrega al menos un item al pedido");
+        return;
+      }
+
+      try {
+        // Inicializar BD
+        await initDB();
+        
+        // Obtener o crear cliente
+        let clienteId = nombreClienteInput.dataset.clienteId;
+        let nombreClienteFinal = nombreCliente;
+        
+        // Si es un cliente existente, usar el nombre original de la URL
+        if (esClienteExistente && clienteIdURL && nombreClienteURL) {
+          nombreClienteFinal = decodeURIComponent(nombreClienteURL);
+          clienteId = clienteIdURL;
+          
+          // Validar que el nombre no haya sido cambiado (aunque esté bloqueado)
+          if (nombreCliente !== nombreClienteFinal) {
+            alert("No se puede cambiar el nombre de un cliente existente");
+            nombreClienteInput.value = nombreClienteFinal;
+            return;
+          }
+        } else if (!clienteId) {
+          // Buscar o crear cliente por nombre (solo si no es cliente existente)
+          const cliente = await obtenerOCrearCliente(nombreCliente);
+          clienteId = cliente.id;
+          nombreClienteFinal = cliente.nombre;
+        }
+        
+        // Calcular total
+        const total = items.reduce((sum, item) => sum + item.subtotal, 0);
+        
+        // Guardar pedido
+        await agregarPedido({
+          clienteId: parseInt(clienteId),
+          items: items,
+          total: total,
+          estado: 'Pendiente'
+        });
+        
+        alert(`Pedido guardado para ${nombreClienteFinal}.\nTotal: ${formatearMoneda(total)}\nItems: ${items.length}`);
+        
+        // Redirigir según el origen
+        if (esClienteExistente && clienteIdURL && nombreClienteURL) {
+          // Si es cliente existente, volver a su página de pedidos
+          window.location.href = `pedidos-cliente.html?cliente=${encodeURIComponent(nombreClienteURL)}&id=${clienteIdURL}`;
+        } else if (nombreClienteURL) {
+          const clienteIdParam = clienteIdURL || clienteId;
+          if (clienteIdParam) {
+            window.location.href = `pedidos-cliente.html?cliente=${encodeURIComponent(nombreClienteURL)}&id=${clienteIdParam}`;
+          } else {
+            window.location.href = `pedidos-cliente.html?cliente=${encodeURIComponent(nombreClienteURL)}`;
+          }
+        } else {
+          window.location.href = 'index.html';
+        }
+      } catch (error) {
+        console.error('Error al guardar pedido:', error);
+        alert('Error al guardar el pedido. Por favor, intenta nuevamente.');
+      }
+    });
+
+    // ========== INICIALIZACIÓN AL CARGAR LA PÁGINA ==========
+    
+    // Esperar a que el DOM esté completamente cargado
+    window.addEventListener('DOMContentLoaded', () => {
+      // Inicializar fecha y hora
+      actualizarFechaHora();
+      
+      // Cargar productos al iniciar
+      cargarProductos();
+      
+      // Configurar botón Volver
+      document.getElementById('btnVolver').addEventListener('click', () => {
+        if (nombreClienteURL && clienteIdURL) {
+          window.location.href = `pedidos-cliente.html?cliente=${encodeURIComponent(nombreClienteURL)}&id=${clienteIdURL}`;
+        } else if (nombreClienteURL) {
+          window.location.href = `pedidos-cliente.html?cliente=${encodeURIComponent(nombreClienteURL)}`;
+        } else {
+          window.location.href = 'index.html';
+        }
+      });
+      
+      // Modal Agregar Producto - Event Listeners
+      btnAgregarProducto.addEventListener('click', () => {
+        document.getElementById('nombreProducto').value = '';
+        document.getElementById('precioProducto').value = '';
+        modalAgregarProducto.showModal();
+      });
+      
+      btnCancelarProducto.addEventListener('click', () => {
+        modalAgregarProducto.close();
+      });
+      
+      // Guardar nuevo producto
+      btnGuardarProducto.addEventListener('click', async () => {
+        const nombreProducto = document.getElementById('nombreProducto').value.trim();
+        const precioProducto = document.getElementById('precioProducto').value;
+        
+        if (!nombreProducto) {
+          alert('Por favor ingresa el nombre del producto');
+          return;
+        }
+        
+        if (!precioProducto || Number(precioProducto) <= 0) {
+          alert('Por favor ingresa un precio válido');
+          return;
+        }
+        
+        try {
+          await initDB();
+          await agregarProducto({
+            nombre: nombreProducto,
+            precio: Number(precioProducto)
+          });
+          
+          // Recargar productos y actualizar combo
+          await cargarProductos();
+          
+          // Seleccionar el producto recién agregado
+          const productos = await obtenerProductos();
+          const productoAgregado = productos.find(p => p.nombre === nombreProducto);
+          if (productoAgregado) {
+            producto.value = productoAgregado.precio;
+            precio.value = "$" + Number(productoAgregado.precio).toLocaleString();
+          }
+          
+          modalAgregarProducto.close();
+          alert(`Producto "${nombreProducto}" agregado correctamente`);
+        } catch (error) {
+          console.error('Error al guardar producto:', error);
+          alert('Error al guardar el producto. Por favor, intenta nuevamente.');
+        }
+      });
+    });
+    
+    window.eliminarItem = eliminarItem;
+  </script>
+
+</body>
+</html>
